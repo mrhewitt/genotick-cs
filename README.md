@@ -10,6 +10,6 @@ Script is in its infancy and being committed only for backup purposes, so while 
 
 It will be updated soon to parse the Genotick output and save the population and settings of the best and worst performing populations.
 
-Also will support multiple markets in standard Genotick data, as well as training for trading a base market using inter-market relationships by merging randomly selected markets into the base market dataset as additional inputs (rather than being traded as seperate markets)  
+Will also support multiple markets in standard Genotick data, as well as training for trading a base market using inter-market relationships by merging randomly selected markets into the base market dataset as additional inputs (rather than being traded as seperate markets)  
 
 Date range is currently hard-coded from 2010 to end of 2018 leaving 2019 for a walk-forward (notes to come) which suits my current purpose, will become configurable later.
