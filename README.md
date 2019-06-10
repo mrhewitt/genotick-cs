@@ -2,7 +2,7 @@
 
 Continuous simulation wrapper for the open-source [Genotick](https://genotick.com/) A.I. Trading Software project
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![GitHub last commit](https://img.shields.io/github/last-commit/mrhewitt/genotick-cs.svg) 
 
 Basic Python wrapper that executes Genotick in a continous loop using a randomly selected market and settings from the raw folder.
 
