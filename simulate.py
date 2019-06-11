@@ -12,6 +12,7 @@ from io import BytesIO
 from zipfile import ZipFile
 from urllib.request import urlopen
 from shutil import copyfile
+from shutil import move
 
 def install_genotick():
 	if not os.path.isfile('genotick.jar'):
@@ -58,9 +59,9 @@ def prepare_run():
 	
 	f = open("config.txt","a+")
 	# create a population with a random number of robots, in multiples of 10000, from 10000 to 100000 inclusive
-	f.write("populationDesiredSize\t{}\r\n".format(random.randint(1,11) * 10000))
-	# look back 1 month, 1 quarter (3 months) (+- 65 trading days), half year (6 months) [+- 124 trading days] or 1 year (12 months) [+- 265 trading days]
-	f.write("dataMaximumOffset\t{}\r\n".format( random.choice((1,65,6*20,12*20)) ))
+	f.write("\r\npopulationDesiredSize\t{}\r\n".format(random.randint(1,11) * 10000))
+	# look back 1 month, 1 quarter (3 months) (+- 65 trading days), half year (6 months) [+- 124 trading days] or 1 year (12 months) [+- 256 trading days]
+	f.write("dataMaximumOffset\t{}\r\n".format( random.choice((20,65,124,256)) ))
 	# start time point is for now fixed to 2010 till end of 2018 leaving 2019 for walk-forward
 	# this needs to become more flexible
 	f.write("startTimePoint\t20100101\r\n")
@@ -83,7 +84,32 @@ def prepare_run():
 	
 	
 def process_result():
+	# TODO: this method needs to detect profit and save best runs 
+
 	print("Processing Result...\r\n")
+	
+	if not os.path.isdir('results'):
+		os.mkdir('results')
+
+	pid = ''
+	for f in os.scandir('.'):
+		if f.name.startswith("predictions_"):
+			pid = f.name.split('_').pop().split('.').shift()
+			break
+	
+	folder_name = 'results/' + pid + '/'
+	print("String results in {}".format(folder_name))
+	
+	os.mkdir('results/' + pid)			
+	move('predictions_'+pid+'.csv',folder_name)
+	move('profit_'_pid+'.csv',folder_name)
+	move('config.txt',folder_name)
+	move('savedPopulation_' + pid, folder_name)
+	
+	# read the last two lines to determine how much profit was made
+	# not most efficient has whole log has to be cached but its simple and files are not huge
+	#for line in reversed(list(open("filename"))):
+    #print(line.rstrip())
 	
 def main():
 	
