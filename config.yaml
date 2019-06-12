@@ -7,4 +7,4 @@ default:
     # train between these time points in your source data
     startTimePoint: 20100101
     endTimePoint: 20181231
-    
+    ramdrive: r

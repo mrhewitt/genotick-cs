@@ -6,6 +6,7 @@ import subprocess
 import sys
 import random
 import yaml
+import re
 
 from os import listdir
 from os.path import isfile, join
@@ -107,6 +108,7 @@ def prepare_run(config):
 	dataMaximumOffset = random.choice(settings['dataMaximumOffset'])
 	
 	f = open("config.txt","a+")
+	f.write("performTraining\ttrue")
 	f.write("\r\npopulationDesiredSize\t{}\r\n".format(populationDesiredSize))
 	f.write("dataMaximumOffset\t{}\r\n".format(dataMaximumOffset))
 	f.write("startTimePoint\t{}\r\n".format(settings['startTimePoint']))
@@ -120,16 +122,19 @@ def prepare_run(config):
 	log("    endTimePoint\t{}".format(settings['endTimePoint']))
 	
 	print("\n\n===================================\n")
-	
-def process_result():
-	# TODO: this method needs to detect profit and save best runs 
 
+	
+def process_result(type):
 	log("Processing Result...")
 	
+	results = {}
 	if not os.path.isdir('results'):
 		log("Missing results folder, creating...")
 		os.mkdir('results')
-
+	elif os.path.isfile('results/results.yaml'):
+		with open("results/results.yaml") as f:
+			results = yaml.safe_load(f)
+			
 	pid = ''
 	for f in os.scandir('.'):
 		if f.name.startswith("predictions_"):
@@ -137,14 +142,43 @@ def process_result():
 			break
 			
 	if pid != '':
-		folder_name = 'results/' + pid + '/'
+
+		# open the log, look for the profit recordings, we want the following:
+		#  Total profit for market [x]: [n]%   <-  the actual account gain/loss
+		#  Total trades: [n], profitable trades: [n]   <- win rate
+		market = ''
+		profit = 0
+		total_trades = 0
+		profitable_trades = 0
+		for line in open('genotick-log-{}.csv'.format(pid)).readlines():	
+			match = re.search("Total profit for market ([a-zA-Z\-]): (\d+\.\d+) %",line)
+			if match:
+				market = match.group(1)
+				profit = match.group(2)
+			else: 
+				match = re.search("Total trades: (\d+), profitable trades: (\d+)",line)
+				if match:
+					total_trades = match.group(1)
+					profitable_trades = match.group(2)
+					winrate = float(profitable_trades)/float(total_trades)
+		
+		key = market + '-' + pid
+		if not key in results:
+			results[key] = {}
+		results[key][type] = {'Percent': profit,'TotalTrades': total_trades, 'ProfitableTrades': profitable_trades, 'WinRate':winrate} 
+			
+		folder_name = 'results/{}-{}/{}'.format(market,pid,type)
 		log("Storing results in {}".format(folder_name))
 		
-		os.mkdir('results/' + pid)			
+		os.mkdir(folder_name)			
 		move('predictions_{}.csv'.format(pid),folder_name)
 		move('profit_{}.csv'.format(pid),folder_name)
 		move('config.txt',folder_name)
 		move('savedPopulation_' + pid, folder_name)
+	
+		with open('results/results.yaml', 'w') as f:
+			yaml.dump(results, f, default_flow_style=False)	
+	
 	else:
 		log("Cannot find predictions output")
 		
@@ -152,6 +186,54 @@ def process_result():
 	# not most efficient has whole log has to be cached but its simple and files are not huge
 	#for line in reversed(list(open("filename"))):
     #print(line.rstrip())
+	
+	
+def prepare_oos(config):
+	log("Preparing OOS...")
+	
+	# delete config from previous run
+	if os.path.isfile('config.txt'):
+		os.unlink('config.txt')
+		
+	# we start making predictions in OOS from the last day we did the training on, this predicts for tomorrow
+	# i.e. the first day that we have not yet trained for	
+	# no end time, we use rest of data for OOS
+	copyfile('empty_config.txt', 'config.txt')
+	
+	f = open("config.txt","a+")
+	f.write("startTimePoint\t{}\r\n".format(settings['endTimePoint']))
+	# dont train, just predict
+	f.write("performTraining\tfalse")
+	# use the population we created, but from the ram drive for speed, we are not going to save this
+	#f.write("populationDAO\t{}:\{}".format(config.ramdrive,''))
+	f.close()
+	
+	print("\n\n===================================\n")
+	
+
+def prepare_trained_oos():
+	log("Preparing OOS Training...")
+	
+	# delete config from previous run
+	if os.path.isfile('config.txt'):
+		os.unlink('config.txt')
+		
+	# we start making predictions in OOS from the last day we did the training on, this predicts for tomorrow
+	# i.e. the first day that we have not yet trained for	
+	# no end time, we use rest of data for OOS
+	copyfile('empty_config.txt', 'config.txt')
+	
+	f = open("config.txt","a+")
+	f.write("startTimePoint\t{}\r\n".format(settings['endTimePoint']))
+	# dont train, just predict
+	f.write("performTraining\ttrue")
+	# use the population we created, but from the ram drive for speed, we are not going to save this
+	f.write("populationDAO\t{}:\{}".format(config.ramdrive,''))
+	f.close()
+	
+	print("\n\n===================================\n")
+	
+
 	
 def main():
 	
@@ -172,9 +254,30 @@ def main():
 		
 		# select a random dataset to parse with some random settings, then begin training
 		prepare_run(config)
-		subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"])
+		subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
 		# see if this result is on of the top, and if so save it for future reference
-		process_result()
+		process_result('InSample')	
+		
+		# small pause to give my old CPU a break!
+		time.sleep(15)
+		
+		# now process the remaining data as an OOS period to determine how will the AI does on unseen data that it has
+		# not been trained on
+		prepare_oos()
+		subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
+		process_result('OOS')
+		
+		# small pause to give my old CPU a break!
+		time.sleep(15)
+		
+		# now process the OOS period again, but this time let the AI train after each month, this way we emulate real
+		# trading of the OOS period better, new data is traded unseen/untrained, but the AI is allowed to train itself
+		# on the OOS data that has been traded in logical chunks (monthly in this case)
+		# TODO: make this a configurable period to allow non-daily data
+		prepare_trained_oos()
+		subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
+		process_result('TrainedOOS')
+		
 		# small pause to give my old CPU a break!
 		time.sleep(15)
 		
