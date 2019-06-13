@@ -102,3 +102,11 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Genotick specific
+*.csv
+data/
+results/
+*.jar
+*.txt
+

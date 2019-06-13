@@ -1,3 +1,12 @@
+settings:
+    # run predictions over unseen data to see how well it performs, set False to skip 
+    oos: True
+    # number of passes to make when retraining on the last previous months oos data for optimizing predictions
+    # for the forthcoming month, will do [n] simulations and pick the best result for the updated population
+    # make 0 to skip this step
+    retrainPasses: 10
+    ramdrive: r
+    
 default:
     # how many robots in your population
     populationDesiredSize: [10000,20000,30000,40000,50000,60000,70000,80000,90000,100000]
@@ -7,4 +16,3 @@ default:
     # train between these time points in your source data
     startTimePoint: 20100101
     endTimePoint: 20181231
-    ramdrive: r

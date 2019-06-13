@@ -15,6 +15,7 @@ from zipfile import ZipFile
 from urllib.request import urlopen
 from shutil import copyfile
 from shutil import move
+from shutil import copytree
 
 def log(message):
 	f = open("simulate.log","a+")
@@ -59,9 +60,17 @@ def reverse_data():
 	subprocess.run(["java", "-jar", "genotick.jar", "reverse=raw"])
 	print("\n\n===================================\n")
 
-#	onlyfiles = [f for f in listdir(data_path) if isfile(join(data_path, f))]
+	
+def get_settings(market, config):
+	# if there is a custom configuration provided for the selected market, use this settings instead of the deault
+	# any settings missing from custom market config will be taken from the default config
+	settings = config['default']
+	if market in config: 
+		for key in config[market]:
+			settings[key] = config[market][key]
+	return settings
 
-
+	
 def prepare_run(config):
 	log("Preparing run...")
 	
@@ -99,11 +108,8 @@ def prepare_run(config):
 	
 	# if there is a custom configuration provided for the selected market, use this settings instead of the deault
 	# any settings missing from custom market config will be taken from the default config
-	settings = config['default']
-	if market in config: 
-		for key in config[market]:
-			settings[key] = config[market][key]
-
+	settings = get_settings(market,config)
+	
 	populationDesiredSize = random.choice(settings['populationDesiredSize'])			
 	dataMaximumOffset = random.choice(settings['dataMaximumOffset'])
 	
@@ -134,11 +140,12 @@ def process_result(type):
 	elif os.path.isfile('results/results.yaml'):
 		with open("results/results.yaml") as f:
 			results = yaml.safe_load(f)
-			
+
+	# search for a predictions file, and if one is found use it to extract the id of the run just cmpleted
 	pid = ''
 	for f in os.scandir('.'):
 		if f.name.startswith("predictions_"):
-			pid = f.name.split('_').pop().split('.').shift()
+			pid = re.search("predictions_(\d+).csv",f.name).group(1)
 			break
 			
 	if pid != '':
@@ -150,18 +157,20 @@ def process_result(type):
 		profit = 0
 		total_trades = 0
 		profitable_trades = 0
-		for line in open('genotick-log-{}.csv'.format(pid)).readlines():	
-			match = re.search("Total profit for market ([a-zA-Z\-]): (\d+\.\d+) %",line)
+		for line in open('genotick-log-{}.txt'.format(pid)).readlines():
+			
+			match = re.search("Total profit for market ([a-zA-Z\-]+): (\d+\.\d+) %",line)
 			if match:
 				market = match.group(1)
-				profit = match.group(2)
+				profit = float(match.group(2))
 			else: 
 				match = re.search("Total trades: (\d+), profitable trades: (\d+)",line)
 				if match:
-					total_trades = match.group(1)
-					profitable_trades = match.group(2)
+					total_trades = int(match.group(1))
+					profitable_trades = int(match.group(2))
 					winrate = float(profitable_trades)/float(total_trades)
-		
+
+		location = {'market':market,'pid':pid}
 		key = market + '-' + pid
 		if not key in results:
 			results[key] = {}
@@ -170,25 +179,25 @@ def process_result(type):
 		folder_name = 'results/{}-{}/{}'.format(market,pid,type)
 		log("Storing results in {}".format(folder_name))
 		
-		os.mkdir(folder_name)			
+		os.makedirs(folder_name, exist_ok=True)			
+		move('genotick-log-{}.txt'.format(pid),folder_name)
 		move('predictions_{}.csv'.format(pid),folder_name)
 		move('profit_{}.csv'.format(pid),folder_name)
 		move('config.txt',folder_name)
-		move('savedPopulation_' + pid, folder_name)
+		if os.path.isdir('savedPopulation_' + pid):
+			move('savedPopulation_' + pid, folder_name)
 	
 		with open('results/results.yaml', 'w') as f:
 			yaml.dump(results, f, default_flow_style=False)	
-	
+		
+		return location
+		
 	else:
 		log("Cannot find predictions output")
+		return {'market':False,'pid':False}
 		
-	# read the last two lines to determine how much profit was made
-	# not most efficient has whole log has to be cached but its simple and files are not huge
-	#for line in reversed(list(open("filename"))):
-    #print(line.rstrip())
 	
-	
-def prepare_oos(config):
+def prepare_oos(config, location):
 	log("Preparing OOS...")
 	
 	# delete config from previous run
@@ -200,18 +209,20 @@ def prepare_oos(config):
 	# no end time, we use rest of data for OOS
 	copyfile('empty_config.txt', 'config.txt')
 	
+	settings = get_settings(location.market,config)
+	
 	f = open("config.txt","a+")
 	f.write("startTimePoint\t{}\r\n".format(settings['endTimePoint']))
 	# dont train, just predict
 	f.write("performTraining\tfalse")
-	# use the population we created, but from the ram drive for speed, we are not going to save this
-	#f.write("populationDAO\t{}:\{}".format(config.ramdrive,''))
+	# use the population we created, we are just training so can read it from the regular drive
+	f.write("populationDAO\tresults/{}-{}/InSample/savedPopulation_{}".format(location.market,location.pid,location.pid))
 	f.close()
 	
 	print("\n\n===================================\n")
 	
 
-def prepare_trained_oos():
+def prepare_trained_oos(config, location):
 	log("Preparing OOS Training...")
 	
 	# delete config from previous run
@@ -223,20 +234,26 @@ def prepare_trained_oos():
 	# no end time, we use rest of data for OOS
 	copyfile('empty_config.txt', 'config.txt')
 	
+	settings = get_settings(location.market,config)
+	
 	f = open("config.txt","a+")
 	f.write("startTimePoint\t{}\r\n".format(settings['endTimePoint']))
 	# dont train, just predict
 	f.write("performTraining\ttrue")
 	# use the population we created, but from the ram drive for speed, we are not going to save this
-	f.write("populationDAO\t{}:\{}".format(config.ramdrive,''))
+	f.write("populationDAO\t{}:\savedPopulation_{}".format(config['settings']['ramdrive'],location.pid))
 	f.close()
+	
+	# copy the saved population onto the ramdrive for processing, tranining off a ramdrive will be significantly
+	# faster than on a regular sata or even M/sdd, 
+	copytree("results/{}-{}/InSample/savedPopulation_{}".format(location.market,location.pid,location.pid), "{}:/".format(config['settings']['ramdrive']))
 	
 	print("\n\n===================================\n")
 	
 
 	
 def main():
-	
+
 	# install genotick jar and config files if they don't already exist in this folder
 	install_genotick()
 
@@ -248,7 +265,7 @@ def main():
 		# a simulation is taking place so these changes can take effect whenever the next simulation is started
 		with open("config.yaml") as f:
 			config = yaml.safe_load(f);
-		
+
 		# ensure all raw data is reversed, do this before each run in case new data files where dropped
 		reverse_data()
 		
@@ -256,27 +273,27 @@ def main():
 		prepare_run(config)
 		subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
 		# see if this result is on of the top, and if so save it for future reference
-		process_result('InSample')	
+		location = process_result('InSample')	
 		
 		# small pause to give my old CPU a break!
 		time.sleep(15)
 		
 		# now process the remaining data as an OOS period to determine how will the AI does on unseen data that it has
 		# not been trained on
-		prepare_oos()
-		subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
-		process_result('OOS')
-		
-		# small pause to give my old CPU a break!
-		time.sleep(15)
+		if config['settings']['oos']:
+			prepare_oos(config, location)
+			subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
+			process_result('OOS')	
+			# small pause to give my old CPU a break!
+			time.sleep(15)
 		
 		# now process the OOS period again, but this time let the AI train after each month, this way we emulate real
 		# trading of the OOS period better, new data is traded unseen/untrained, but the AI is allowed to train itself
 		# on the OOS data that has been traded in logical chunks (monthly in this case)
 		# TODO: make this a configurable period to allow non-daily data
-		prepare_trained_oos()
-		subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
-		process_result('TrainedOOS')
+		#prepare_trained_oos()
+	#	subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
+		#process_result('TrainedOOS')
 		
 		# small pause to give my old CPU a break!
 		time.sleep(15)
