@@ -6,10 +6,14 @@ Continuous simulation wrapper for the open-source [Genotick](https://genotick.co
 
 Basic Python wrapper that executes Genotick in a continous loop using a randomly selected market and settings from the raw folder.
 
-Script is in its infancy and being committed only for backup purposes, so while it runs the simulation if does not process the results.
+Script is in its infancy and being committed only for backup purposes. Currently script will run the simulations, and cache the results but further functionality is not yet fully implemented.
 
-It will be updated soon to parse the Genotick output and save the population and settings of the best and worst performing populations.
+Will in future also support multiple markets in standard Genotick data, as well as training for trading a base market using inter-market relationships by merging randomly selected markets into the base market dataset as additional inputs (rather than being traded as seperate markets)  
 
-Will also support multiple markets in standard Genotick data, as well as training for trading a base market using inter-market relationships by merging randomly selected markets into the base market dataset as additional inputs (rather than being traded as seperate markets)  
+### Genotick Notes
 
-Date range is currently hard-coded from 2010 to end of 2018 leaving 2019 for a walk-forward (notes to come) which suits my current purpose, will become configurable later.
+The Genotick version currently available from the website does not actually output the profit CSV data despite the setting. The functionality is available in the master but not yet actually implemented.
+
+To use Genotick with this script you will need to build from the source using my fork that fixes this. This is a simple quick fix to implement this output functionality, to be cleaned up and submitted as a pull request in future.
+
+[https://gitlab.com/mrhewitt/genotick]
