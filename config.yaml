@@ -6,6 +6,8 @@ settings:
     # make 0 to skip this step
     retrainPasses: 10
     ramdrive: r
+    minProfit: 0
+    minWinRate: 50
     
 default:
     # how many robots in your population
@@ -15,4 +17,4 @@ default:
     dataMaximumOffset: [20,65,124,256]
     # train between these time points in your source data
     startTimePoint: 20100101
-    endTimePoint: 20181231
+    endTimePoint: 20100131
