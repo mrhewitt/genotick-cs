@@ -16,12 +16,29 @@ from urllib.request import urlopen
 from shutil import copyfile
 from shutil import move
 from shutil import copytree
+from shutil import rmtree
 
 def log(message):
 	f = open("simulate.log","a+")
 	f.write(message + "\r\n")
 	f.close()
 	print(message)
+
+	
+def remove_genotick_logs():
+	log("Cleaning Genotick output...")
+	for f in os.scandir('.'):
+		if f.name.startswith("genotick-") or f.name.startswith("profit_") or f.name.startswith("predictions_") or f.name == "config.txt":
+			log("Removing {}".format(f.path))
+			os.unlink(f.path)	
+		if f.name.startswith('savedPopulation'):
+			log("Removing {}".format(f.path))
+			rmtree(f.path)
+
+			
+def genotick(message):
+	log(message)
+	subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
 	
 	
 def install_genotick():
@@ -29,13 +46,11 @@ def install_genotick():
 		log("Installing Genotick...")
 		
 		# download genotick installation and install the jar file
-		zipfile = ZipFile(BytesIO(urlopen('https://genotick.com/static/download/genotick.zip').read()))
-		#print(*zipfile.namelist(), sep = "\n") 
+		zipfile = ZipFile(BytesIO(urlopen('https://genotick.com/static/download/genotick.zip').read())) 
 		with open('genotick.jar', 'wb') as f:
 			f.write( zipfile.open("genotick/genotick.jar").read() )
 			f.close();
-		#zipfile.extract("genotick/genotick.jar");
-		
+
 		# extract genotick example config file and save it as our default config excluding settings that we will customize
 		f = open('empty_config.txt','wb+')
 		for line in zipfile.open("genotick/exampleConfigFile.txt").readlines():
@@ -58,6 +73,8 @@ def reverse_data():
 			os.unlink(f.path)
 			
 	subprocess.run(["java", "-jar", "genotick.jar", "reverse=raw"])
+	remove_genotick_logs()
+	
 	print("\n\n===================================\n")
 
 	
@@ -73,6 +90,7 @@ def get_settings(market, config):
 	
 def prepare_run(config):
 	log("Preparing run...")
+	remove_genotick_logs()
 	
 	if not os.path.isdir('data'):
 		log("data folder does not exist, creating...")
@@ -161,7 +179,7 @@ def process_result(type,config, resultPid=False):
 		profitable_trades = 0
 		for line in open('genotick-log-{}.txt'.format(pid)).readlines():
 			
-			match = re.search("Total profit for market ([a-zA-Z\-]+): (\d+\.\d+) %",line)
+			match = re.search("Total profit for market ([a-zA-Z\-]+): (\-?\d+\.\d+) %",line)
 			if match:
 				market = match.group(1)
 				profit = float(match.group(2))
@@ -182,8 +200,8 @@ def process_result(type,config, resultPid=False):
 		results[key][type] = {'Percent': profit,'TotalTrades': total_trades, 'ProfitableTrades': profitable_trades, 'WinRate':winrate} 
 		log("{} :: {} - Percent Growth: {}, Win Rate: {}".format(market,type,profit,winrate*100))
 		
-		if profit >= config['settings']['minProfit']: 
-			folder_name = 'results/{}-{}/{}'.format(market,resultPid,type)
+		if profit >= config['settings'][type]['minProfit']: 
+			folder_name = 'results/{}/{}'.format(key,type)
 			log("Storing results in {}".format(folder_name))
 		
 			os.makedirs(folder_name, exist_ok=True)			
@@ -199,7 +217,16 @@ def process_result(type,config, resultPid=False):
 			
 			return location
 		else:
-			log("Rejected - profit of {} is less than minimum setting of {}".format(profit,config['settings']['minProfit']))
+			remove_genotick_logs()
+			os.remove('config.txt')	
+			
+			# remove this market from the result list altogether, as we dont want a population that fails any of the tests  
+			rmtree('results/' + key)
+			results.pop(key,None)
+			with open('results/results.yaml', 'w') as f:
+				yaml.dump(results, f, default_flow_style=False)	
+					
+			log("Rejected {} - profit of {} is less than minimum setting of {}".format(type,profit,config['settings'][type]['minProfit']))
 			return {'market':False,'pid':False}
 		
 	else:
@@ -267,10 +294,16 @@ def main():
 	# install genotick jar and config files if they don't already exist in this folder
 	install_genotick()
 
+	# create lock file to keep the process running until this file is removed
+	# removing this file will cause the simulator to complete the current simulation then exit
 	f = open("lock","w+")
 	f.close()
 	
 	while os.path.isfile('lock'): 
+		
+		# ensure run is clean
+		remove_genotick_logs()
+
 		# read the config file between runs, this allows users to ammend this to add/change settings whilst	
 		# a simulation is taking place so these changes can take effect whenever the next simulation is started
 		with open("config.yaml") as f:
@@ -280,12 +313,11 @@ def main():
 		reverse_data()
 
 		# select a random dataset to parse with some random settings, then begin training
-	##	prepare_run(config)
-	##	subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
+		prepare_run(config)
+		genotick("Running Genotick for initial training")
 		# see if this result is on of the top, and if so save it for future reference
-	##	location = process_result('InSample',config)
-		location = {'market': 'AUDCAD-D','pid':'7652'}
-		
+		location = process_result('InSample',config)
+
 		# only carry on if we found valid result
 		if location['market']:
 			# small pause to give my old CPU a break!
@@ -294,11 +326,11 @@ def main():
 			# now process the remaining data as an OOS period to determine how will the AI does on unseen data that it has
 			# not been trained on
 			if config['settings']['oos']:
-			##	prepare_oos(config, location)
-			##	subprocess.run(["java", "-jar", "genotick.jar", "input=file:config.txt", "output=csv"],timeout=86400)
+				prepare_oos(config, location)
+				genotick("Running Genotick for OOS prediction generation")
 				process_result('OOS',config,location['pid'])	
 				# small pause to give my old CPU a break!
-				##time.sleep(15)
+				time.sleep(15)
 			
 			# now process the OOS period again, but this time let the AI train after each month, this way we emulate real
 			# trading of the OOS period better, new data is traded unseen/untrained, but the AI is allowed to train itself

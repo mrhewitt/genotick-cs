@@ -1,12 +1,16 @@
 settings:
-    # run predictions over unseen data to see how well it performs, set False to skip 
-    oos: True
-    # number of passes to make when retraining on the last previous months oos data for optimizing predictions
-    # for the forthcoming month, will do [n] simulations and pick the best result for the updated population
-    # make 0 to skip this step
-    retrainPasses: 10
-    ramdrive: r
-    minProfit: 0
+  # run predictions over unseen data to see how well it performs, set False to skip 
+  oos: True
+  # number of passes to make when retraining on the last previous months oos data for optimizing predictions
+  # for the forthcoming month, will do [n] simulations and pick the best result for the updated population
+  # make 0 to skip this step
+  retrainPasses: 10
+  ramdrive: r
+  InSample:    
+    minProfit: 10
+    minWinRate: 50
+  OOS:
+    minProfit: 2
     minWinRate: 50
     
 default:
@@ -16,5 +20,6 @@ default:
     # look back 1 month, 1 quarter (3 months) (+- 65 trading days), half year (6 months) [+- 124 trading days] or 1 year (12 months) [+- 256 trading days]
     dataMaximumOffset: [20,65,124,256]
     # train between these time points in your source data
+    # all time points after the end time will be used as OOS data to evaluate the robots
     startTimePoint: 20100101
-    endTimePoint: 20100131
+    endTimePoint: 20181231
