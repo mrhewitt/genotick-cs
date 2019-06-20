@@ -104,11 +104,11 @@ def prepare_run(config):
 		
 	# select a random file from the raw data directory to train
 	# check config first, if the user specified a list of markets to use, select only from those
-	if 'market' in config['default']:
-		if type(config['default']['market']) == 'str':
-			market = config['default']['market']
+	if 'market' in config['settings']:
+		if type(config['settings']['market']) == 'str':
+			market = config['settings']['market']
 		else:
-			market = random.choice(config['default']['market'])
+			market = random.choice(config['settings']['market'])
 	else:
 		market = random.choice([f for f in listdir('raw') if isfile(join('raw/', f)) and f.find('reverse_') == -1]).replace('.csv','')
 	
@@ -148,6 +148,49 @@ def prepare_run(config):
 	print("\n\n===================================\n")
 
 	
+def fetch_outcome(resultPid):
+	# search for a predictions file, and if one is found use it to extract the id of the run just cmpleted
+	pid = ''
+	for f in os.scandir('.'):
+		if f.name.startswith("predictions_"):
+			pid = re.search("predictions_(\d+).csv",f.name).group(1)
+			break
+			
+	if pid != '':
+		if not resultPid:
+			resultPid = pid
+			
+		# open the log, look for the profit recordings, we want the following:
+		#  Total profit for market [x]: [n]%   <-  the actual account gain/loss
+		#  Total trades: [n], profitable trades: [n]   <- win rate
+		market = ''
+		profit = 0
+		total_trades = 0
+		profitable_trades = 0
+		result = {}
+		for line in open('genotick-log-{}.txt'.format(pid)).readlines():
+			
+			match = re.search("Total profit for market ([a-zA-Z\-]+): (\-?\d+\.\d+) %",line)
+			if match:
+				market = match.group(1)
+				profit = float(match.group(2))
+			else: 
+				match = re.search("Total trades: (\d+), profitable trades: (\d+)",line)
+				if match:
+					total_trades = int(match.group(1))
+					if total_trades == 0:
+						log("Rejected - no trades taken")
+						return False
+					profitable_trades = int(match.group(2))
+					winrate = float(profitable_trades)/float(total_trades)
+
+		result['location'] = {'market':market,'pid':resultPid}
+		result['result'] = {'Percent': profit,'TotalTrades': total_trades, 'ProfitableTrades': profitable_trades, 'WinRate':winrate} 
+		log("{} :: {} - Percent Growth: {}, Win Rate: {}".format(market,type,profit,winrate*100))
+	else:
+		return False
+		
+	
 def process_result(type,config, resultPid=False):
 	log("Processing Result...")
 	
@@ -174,15 +217,16 @@ def process_result(type,config, resultPid=False):
 		#  Total profit for market [x]: [n]%   <-  the actual account gain/loss
 		#  Total trades: [n], profitable trades: [n]   <- win rate
 		market = ''
-		profit = 0
+		total_ticks = 0
 		total_trades = 0
 		profitable_trades = 0
 		for line in open('genotick-log-{}.txt'.format(pid)).readlines():
 			
-			match = re.search("Total profit for market ([a-zA-Z\-]+): (\-?\d+\.\d+) %",line)
+			match = re.search("Total profit for market ([a-zA-Z0-9\-]+): (\-?\d+\.\d+) ticks, avg. (\-?\d+\.\d+) ticks / trade",line)
 			if match:
 				market = match.group(1)
-				profit = float(match.group(2))
+				total_ticks = float(match.group(2))
+				tickspertrade = float(match.group(3))
 			else: 
 				match = re.search("Total trades: (\d+), profitable trades: (\d+)",line)
 				if match:
@@ -197,10 +241,10 @@ def process_result(type,config, resultPid=False):
 		key = market + '-' + resultPid
 		if not key in results:
 			results[key] = {}
-		results[key][type] = {'Percent': profit,'TotalTrades': total_trades, 'ProfitableTrades': profitable_trades, 'WinRate':winrate} 
-		log("{} :: {} - Percent Growth: {}, Win Rate: {}".format(market,type,profit,winrate*100))
+		results[key][type] = {'Ticks': total_ticks,'TicksPerTrade':tickspertrade,'TotalTrades': total_trades, 'ProfitableTrades': profitable_trades, 'WinRate':winrate} 
+		log("{} :: {} - Total Ticks: {}, Ticks Per Trade: {}, Win Rate: {}".format(market,type,total_ticks,tickspertrade,winrate*100))
 		
-		if profit >= config['settings'][type]['minProfit']: 
+		if total_ticks >= config['settings'][type]['minProfit'] and tickspertrade >= config['settings'][type]['minTicksPerTrade']: 
 			folder_name = 'results/{}/{}'.format(key,type)
 			log("Storing results in {}".format(folder_name))
 		
@@ -218,10 +262,10 @@ def process_result(type,config, resultPid=False):
 			return location
 		else:
 			remove_genotick_logs()
-			os.remove('config.txt')	
 			
-			# remove this market from the result list altogether, as we dont want a population that fails any of the tests  
-			rmtree('results/' + key)
+			# remove this market from the result list altogether, as we dont want a population that fails any of the tests 
+			if os.path.isdir('results/' + key):
+				rmtree('results/' + key)
 			results.pop(key,None)
 			with open('results/results.yaml', 'w') as f:
 				yaml.dump(results, f, default_flow_style=False)	

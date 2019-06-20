@@ -7,19 +7,33 @@ settings:
   retrainPasses: 10
   ramdrive: r
   InSample:    
-    minProfit: 10
+    minProfit: 0
     minWinRate: 50
+    minTicksPerTrade: 2
   OOS:
-    minProfit: 2
+    minProfit: 0
     minWinRate: 50
-    
+    minTicksPerTrade: 2
+  # optional, list of markets to trade from raw, this allows you to keep csv data for multiple markets in
+  #  raw folder but simluate on only specific data sets 
+  market: 
+    - XTIUSD-D  
+   
 default:
-    # how many robots in your population
-    populationDesiredSize: [10000,20000,30000,40000,50000,60000,70000,80000,90000,100000]
-    # data loookback (offset), must be a list of integers, number of bars in your data Genotick looks back to train 
-    # look back 1 month, 1 quarter (3 months) (+- 65 trading days), half year (6 months) [+- 124 trading days] or 1 year (12 months) [+- 256 trading days]
-    dataMaximumOffset: [20,65,124,256]
-    # train between these time points in your source data
-    # all time points after the end time will be used as OOS data to evaluate the robots
-    startTimePoint: 20100101
-    endTimePoint: 20181231
+  # how many robots in your population
+  populationDesiredSize: [10000,20000,30000,40000,50000,60000,70000,80000,90000,100000]
+  # data loookback (offset), must be a list of integers, number of bars in your data Genotick looks back to train 
+  # look back 1 month, 1 quarter (3 months) (+- 65 trading days), half year (6 months) [+- 124 trading days] or 1 year (12 months) [+- 256 trading days]
+  dataMaximumOffset: [20,65,124,256]
+  # train between these time points in your source data
+  # all time points after the end time will be used as OOS data to evaluate the robots
+  startTimePoint: 20100101
+  endTimePoint: 20181231
+    
+EURUSD-H1:
+  dataMaximumOffset: [8,12,24,48]
+  startTimePoint: 20190301000000
+  endTimePoint: 20190531230000
+  
+XTIUSD-D:
+  startTimePoint: 20100502
