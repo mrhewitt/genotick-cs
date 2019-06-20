@@ -14,6 +14,8 @@ Will in future also support multiple markets in standard Genotick data, as well 
 
 The Genotick version currently available from the website does not actually output the profit CSV data despite the setting. The functionality is available in the master but not yet actually implemented.
 
-To use Genotick with this script you will need to build from the source using my fork that fixes this. This is a simple quick fix to implement this output functionality, to be cleaned up and submitted as a pull request in future.
+Additionally, Genotick money management is better suited to non-leveraged equity positions that margin trading, this simulator requires the output for analysis be in ticks, which makes more sense as it is both market and money independant. 
+
+To use Genotick with this script you will need to build from the source using my fork that fixes both these issues. 
 
 [https://gitlab.com/mrhewitt/genotick]
