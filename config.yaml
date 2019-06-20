@@ -5,7 +5,7 @@ settings:
   # for the forthcoming month, will do [n] simulations and pick the best result for the updated population
   # make 0 to skip this step
   retrainPasses: 10
-  ramdrive: r
+  RAMDrive: r
   InSample:    
     minProfit: 0
     minWinRate: 50
@@ -18,7 +18,7 @@ settings:
   #  raw folder but simluate on only specific data sets 
   market: 
     - XTIUSD-D  
-   
+    
 default:
   # how many robots in your population
   populationDesiredSize: [10000,20000,30000,40000,50000,60000,70000,80000,90000,100000]
@@ -37,3 +37,20 @@ EURUSD-H1:
   
 XTIUSD-D:
   startTimePoint: 20100502
+  endTimePoint: 20181231
+  populationDesiredSize: [10000]
+  dataMaximumOffset: [5,10,20]
+
+# definitions of various intrumenrts that will be traded, just to provide more human friendly output
+# this works by assuming the base market name is the instrument name, thus the piece before the -
+# matching in done in order using a regex 
+# e.g.   XTIUSD-D  will be mapped to the instrument XTIUSD 
+#        and EURUSD will be mapped to [a-z]+
+#        XTIUSD won't be matched to EURUSD as XTIUSD is higher in list
+#
+#  multipler - used to convert fractional ticks into whole numbers, e.g.  100 for crude or 10000 for 5 digit forex
+instruments:  
+  # pepperstone WTI crude oil
+  XTIUSD:
+    multiplier: 100
+    
