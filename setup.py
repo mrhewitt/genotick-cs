@@ -10,7 +10,7 @@ setup(
     keywords = "trading ai genotick",
     url = "https://github.com/mrhewitt/genotick-cs",
 	#packages=['simulate', 'advisor', 'ecurve', 'tests'],
-	py_modules=['simulate'],
+	packages=find_packages(),
 	install_requires=[
 		'Click',
 		'numpy',
