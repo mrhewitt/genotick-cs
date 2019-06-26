@@ -42,16 +42,21 @@
 //--- input parameters
 input double   Lots=0.01;
 input double   ATRRatio = 0.1;
+input double   SLRatioOfATR = 0;
 input bool     UseLimitOffset = true;
+input string   sINVERT = "--- If Invert is true then EA will trade opposite to Genotick ---";
 input bool     Invert=false;
 input int      Magic = 20190606;
-input string   PFILE = "--- Put your file in tester/files folder ---"
+input string   PFILE = "--- Put your file in tester/files folder ---";
 input string   PredictionsFile = "walkforward.csv";	 
 input string   Comment = "GTWF-EA";
 
 datetime previousBar ;
-// max 1000 bars of walk forawrd
-string action_data[3][1000];
+// max 2000 bars of walk forawrd
+string action_data[3][2000];
+// is the given data daily or intra day , day data is genotick format YYYYDDMM
+// intraday data is time format  YYYYDDMMHHmmSS
+bool day_format = true;
 int days = 0;
 
 
@@ -63,7 +68,7 @@ int OnInit()
 //---
       previousBar = iTime(Symbol(),Period(),0);
       if ( !loadCSV() ) { return (INIT_FAILED); }
-           
+      day_format = (StringLen(action_data[0][0]) == 8);    
 //---
    return(INIT_SUCCEEDED);
   }
@@ -83,14 +88,19 @@ void OnTick()
 //---
       // we only make a new trading decision once a new bar opens
       if ( newBar(previousBar,Symbol(),Period()) ) {
-         flatten();
+         
+         // remove any unfilled orders
+         flatten(OP_BUYLIMIT);
+         flatten(OP_SELLLIMIT);
          
          int yesterday;
          
          // we get "yesterdays" bar date, as this is the bar that Genotick used to make the
          // prediction for what is now today in MT4 time
-         string date = TimeToString(Time[1],TIME_DATE);
+         string date = TimeToString(Time[1], ( day_format ? TIME_DATE : TIME_DATE|TIME_MINUTES|TIME_SECONDS) );
          StringReplace(date, ".", "" );
+         StringReplace(date," ", "");
+         StringReplace(date, ":", "");
          for ( yesterday = 0; yesterday < days; yesterday++ ) {
             if ( date == action_data[0][yesterday] ) {
                Print("Row ", yesterday, " is yesterday, ", date , " on MT4 matching ", action_data[0][yesterday], " in data");
@@ -99,14 +109,19 @@ void OnTick()
          }
                
          string prediction = action_data[2][yesterday];
-         Print( "On " , action_data[0][yesterday], " we predicted ", prediction);
-         if ( prediction == "UP" ) {
-            buy();
-         } else if ( prediction == "DOWN" ) {
-            sell();
+         Print( date, " On " , action_data[0][yesterday], " we predicted ", prediction);
+         
+         // check to see if we are currently in a position, if it is the same as the prediction, we do nothing
+         // and just stay in, if its not, we cut and reverse
+         int pos = currentPosition();
+         if ( pos == -1 || (pos == OP_BUY && prediction != "UP") || (pos == OP_SELL && prediction != "DOWN") ) {
+            flatten();
+            if ( prediction == "UP" ) {
+               buy();
+            } else if ( prediction == "DOWN" ) {
+               sell();
+            }
          }
-         
-         
       }
   }
 //+------------------------------------------------------------------+
@@ -117,13 +132,13 @@ void buy() {
    while(IsTradeContextBusy()) Sleep(50);
    RefreshRates();
    
-   
    if ( !Invert ) {
       if ( !UseLimitOffset ) {
          OrderSend(Symbol(), OP_BUY, Lots, Ask, 0, 0, 0/*Bid - (TPPips/10)*/, Comment, Magic);
       } else {
       //   Print("Bid at ", Bid, ", buy limit at ", Bid - getOffset());
-         OrderSend(Symbol(), OP_BUYLIMIT, Lots, Bid - getOffset(), 0, 0, 0/*Bid - (TPPips/10)*/, Comment, Magic);
+         double price = Open[0] - getOffset();
+         OrderSend(Symbol(), OP_BUYLIMIT, Lots, price, 0, SLRatioOfATR ? price - getSL() : 0, 0/*Bid - (TPPips/10)*/, Comment, Magic);
       }
    } else {
       // we are fading the strategy, so go long when strategy says go short, with TP where stratgy stop was and SL when target was
@@ -141,7 +156,8 @@ void sell() {
          OrderSend(Symbol(), OP_SELL, Lots, Bid, 0, 0, 0/*Bid - (TPPips/10)*/, Comment, Magic);
      } else {
       //   Print("Bid at ", Bid, ", sell limit at ", Bid + getOffset());
-         OrderSend(Symbol(), OP_SELLLIMIT, Lots, Bid + getOffset(), 0, 0, 0/*Bid - (TPPips/10)*/, Comment, Magic);
+         double price  = Open[0] + getOffset();         
+         OrderSend(Symbol(), OP_SELLLIMIT, Lots, price, 0, SLRatioOfATR ? price + getSL() : 0, 0/*Bid - (TPPips/10)*/, Comment, Magic);
      }
    } else {
       // we are fading the strategy, so go long when strategy says go short, with TP where stratgy stop was and SL when target was
@@ -151,9 +167,12 @@ void sell() {
 
 double getOffset() {
    double atr = iATR(Symbol(),Period(),20,1);
-   double offset = NormalizeDouble(atr * ATRRatio,4);
- //  Print( "ATR ", atr, " and offset is ", NormalizeDouble(atr * ATRRatio,4));
+   double offset = NormalizeDouble(atr * ATRRatio,Digits());
    return offset;
+}
+
+double getSL() {
+   return ( SLRatioOfATR ? NormalizeDouble(iATR(Symbol(),Period(),20,1) * SLRatioOfATR,Digits()) : 0 );
 }
 
 void flatten( int onlyTradesOf = -1, bool wholePosition = true ) {
@@ -189,6 +208,18 @@ bool isFlat() {
    return (true);   // no open orders for our EA
 }
 
+/**
+ * finds an open order for this EA and returns its type
+ */ 
+int currentPosition() {
+   for (int cc = OrdersTotal() - 1; cc >= 0; cc--) {
+      if (!OrderSelect(cc, SELECT_BY_POS) ) continue;      
+      if ( OrderMagicNumber() == Magic && OrderSymbol() == Symbol() ) {
+         return OrderType();     // found an active position in our EA
+      }
+   }
+   return -1;     // no positions
+}
 
 // This function returns the value true if the current bar/candle was just formed
 bool newBar(datetime& pBar,string symbol,int timeframe)
@@ -214,7 +245,7 @@ bool loadCSV() {
        string temp = FileReadString(handle); //read csv cell
        if ( FileIsEnding(handle) ) break; 
        // skip oddrows, this has this reverse data in it
-       if ( row % 2 == 0 )  { action_data[col][row] = temp; } 
+       if ( true || row % 2 == 0 )  { action_data[col][row] = temp; } 
        if ( FileIsLineEnding(handle) ) {
          col = 0; //reset col = 0 for the next row
          row++; //next row
