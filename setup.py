@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
 	name="Genotick Continuous Simulator",
-	version="0.2",
+	version="0.3",
     author = "Mark Hewitt",
     author_email = "mr.mark.hewitt@gmail.com",
     description = ("A continous simulation wrapper and output graphing tool for Genotick Trading AI software"),
@@ -20,7 +20,7 @@ setup(
 	 entry_points={ 
 			'console_scripts': [
 				'simulate=simulate:cli',
-			#	'ecurve=ecurve:cli',
+				'ecurve=ecurve:cli',
 			#	'advisor=advisor:cli'
 			],
 		},

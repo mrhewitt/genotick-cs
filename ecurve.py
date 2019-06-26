@@ -1,5 +1,5 @@
 import click
-from visualize import equityparser
+from visualizer.equityparser import EquityParser
 
 @click.command()
 @click.option('--period', default=20, help="Period for the Rolling Mean to apply to the equity curve")
@@ -11,7 +11,5 @@ def cli(period,filter,multiplier,profits):
 	Generate an equity curve graph from a Genotick profits CSV file
 	"""
 	
-	ecurve = equityparser.EquityParser( profits, multiplier )
-	ecurve.show_default_curve(period);
-	if filter:
-		ecurve.show_filtered_curve(period);
+	ecurve = EquityParser( profits, multiplier )
+	ecurve.show_equity_curve(period,filter);

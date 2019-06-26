@@ -21,6 +21,9 @@ class Market:
 			raise StopIteration
 		self.index += 1
 		return result
+		
+	def __len__(self):
+		return len(self.markets)
 
 
 	def use(self,market):

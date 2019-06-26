@@ -52,7 +52,7 @@ def cli(market, count, merge, merge_count, once, random, walkforward, go_live, r
 		#if merge is not None:
 		#	markets.merge( merge.split(','), merge_count )
 			
-		#simulator = Simulate(config).run( markets ).process()	
+		simulator = Simulate(config).run( markets ).process()	
 		#if walkforward:	
 		#	simulator.walkforward().process()
 			
